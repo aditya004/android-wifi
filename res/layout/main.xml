@@ -12,30 +12,29 @@
 			android:id="@+id/reset_view"    
 			android:layout_width="wrap_content"     
 			android:layout_height="wrap_content"     
-			android:text="RST" />  
+			android:text="Reset" />  
 		<Button    
 			android:id="@+id/scan_wifi"    
 			android:layout_width="wrap_content"     
 			android:layout_height="wrap_content"     
-			android:text="SCAN" />  
+			android:text="Scan" />  
 		<Button    
 			android:id="@+id/list_configured_wifi"    
 			android:layout_width="wrap_content"     
 			android:layout_height="wrap_content"     
-			android:text="LIST CONF" />  
-		<Button    
+			android:text="ListConf" />  
+		<Button 
 			android:id="@+id/start_boarding_device"    
 			android:layout_width="wrap_content"     
 			android:layout_height="wrap_content"     
-			android:text="BOARD" />  
+			android:text="OnBoarding" />  
 	</LinearLayout>
 	<LinearLayout  
-		android:id="@+id/board_layout"    
+		android:id="@+id/on_boarding_layout"    
 		android:orientation="vertical"  
 		android:layout_width="wrap_content"  
 		android:layout_height="wrap_content" >  
 		<LinearLayout  
-			android:id="@+id/board_layout1"    
 			android:orientation="horizontal"  
 			android:layout_width="wrap_content"  
 			android:layout_height="wrap_content" >  
@@ -43,7 +42,7 @@
 				android:layout_width="wrap_content"     
 				android:layout_height="wrap_content"     
 				android:textColor="@color/text_color"
-				android:text="TARGET DEVICE: "/>  
+				android:text="Device: "/>  
 			<Spinner
 				android:id="@+id/target_device_spinner"    
 				android:layout_width="wrap_content"     
@@ -68,17 +67,17 @@
 				android:layout_width="wrap_content"     
 				android:layout_height="wrap_content"     
 				android:textColor="@color/text_color"
-				android:text="PWD: "/>  
+				android:text="Pwd: "/>  
 			<EditText
-				android:id="@+id/pwd"
+				android:id="@+id/on_boarding_pwd"
 				android:layout_width="150dp"
 				android:layout_height="wrap_content"
 				android:layout_weight="1" />
 			<Button    
-				android:id="@+id/on_board_device"    
+				android:id="@+id/save_on_boarding_info"    
 				android:layout_width="wrap_content"     
 				android:layout_height="wrap_content"     
-				android:text="SAVE" />  
+				android:text="Save" />  
 		</LinearLayout>
 		<LinearLayout  
 			android:orientation="horizontal"  
@@ -89,9 +88,9 @@
 				android:layout_height="wrap_content"     
 				android:textColor="@color/text_color"
 				android:textSize="16sp"  
-				android:text="SELECTED SSID: "/>  
+				android:text="SSID: "/>  
 			<TextView
-				android:id="@+id/ssid"    
+				android:id="@+id/on_boarding_ssid"    
 				android:layout_width="wrap_content"     
 				android:layout_height="wrap_content"     
 				android:textColor="@color/text_color"
