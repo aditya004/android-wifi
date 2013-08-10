@@ -9,6 +9,11 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.Collections;
 import java.util.Comparator;
+import java.net.Socket;
+import java.io.PrintWriter;
+import java.io.BufferedWriter;
+import java.io.OutputStreamWriter;
+import java.io.IOException;
 import android.app.ListActivity;
 import android.widget.Button;
 import android.widget.TextView;
@@ -55,8 +60,12 @@ public class MainActivity extends ListActivity
 	private static final short MSG_SHOW_WIFI_SCAN_RESULT = 2;
 	private static final short MSG_START_UP = 3;
 	private static final short MSG_ENABLE_BUTTONS = 4;
+	private static final short MSG_ON_BOARD_DEVICE = 5;
+	private static final short MSG_ON_BOARDING_SUCCESS = 7;
 
 	private static final String DEVICE_AP_PREFIX = "WiFly";
+	private static final String DEVICE_IP = "1.2.3.4";
+	private static final int DEVICE_TCP_PORT = 2000;
 
 	private Handler mBackendHandler;
 	private Handler mHandler = new Handler() 
@@ -138,6 +147,15 @@ public class MainActivity extends ListActivity
 					mListConfiguredWifi.setEnabled(true);
 					mOnBoardDevice.setEnabled(true);
 					mStartBoardingDevice.setEnabled(true);
+					break;
+
+				case MSG_ON_BOARDING_SUCCESS:
+					String text = "finish onboarding, please give a try.";  
+					Toast.makeText(getApplicationContext(), text, Toast.LENGTH_LONG).show();  
+					mOnBoardDevice.setEnabled(true);
+
+					// turn the wifi back
+					joinDeviceAp(mPreviousSsid);
 					break;
 
 				default:
@@ -234,6 +252,13 @@ public class MainActivity extends ListActivity
 						sleep(3000);
 						Message showWifiScanResultMsg = mHandler.obtainMessage(MSG_SHOW_WIFI_SCAN_RESULT, msg.obj);
 						mHandler.sendMessage(showWifiScanResultMsg);
+						break;
+
+					case MSG_ON_BOARD_DEVICE:
+						saveInfoToDevice((String)msg.obj);
+
+						Message onBoardingSuccessMsg = mHandler.obtainMessage(MSG_ON_BOARDING_SUCCESS);
+						mHandler.sendMessage(onBoardingSuccessMsg);
 						break;
 
 					default:
@@ -362,6 +387,8 @@ public class MainActivity extends ListActivity
 
 	private void onBoardDevice()
 	{
+		mOnBoardDevice.setEnabled(false);
+
 		String targetDeviceSsid = mTargetDeviceSpinner.getSelectedItem().toString();
 		String ssid = mSsid.getText().toString();
 		String password = mPwd.getText().toString();
@@ -375,12 +402,10 @@ public class MainActivity extends ListActivity
 		addDeviceAp(targetDeviceSsid);
 		joinDeviceAp(targetDeviceSsid);
 
-		// TODO:
-		// write the ssid+password to devcie
-		sleep(5000);
-
-		// turn the wifi back
-		joinDeviceAp(mPreviousSsid);
+		// write the ssid and password to device
+		String obj = "*BOARDING*\n" + ssid + "\n" + password;
+		Message msg = mBackendHandler.obtainMessage(MSG_ON_BOARD_DEVICE, obj);
+		mBackendHandler.sendMessage(msg);
 	}
 
 	private void resetView()
@@ -421,5 +446,33 @@ public class MainActivity extends ListActivity
 		String infoText = "scanning...";
 		mScanWifi.setText(infoText);
 		//Toast.makeText(MainActivity.this, infoText, android.widget.Toast.LENGTH_LONG).show();
+	}
+
+	private void saveInfoToDevice(String msg)
+	{
+		sleep(10000); // waiting for the wifi ready
+		Utils.PrintLog("writing(" + DEVICE_IP + ":" + DEVICE_TCP_PORT + "): " + msg);
+		try
+		{
+			Socket socket = new Socket(DEVICE_IP, DEVICE_TCP_PORT);  
+			try
+			{
+				PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);  
+				out.println(msg);  
+				out.flush();  
+			}
+			catch (Exception ex1) 
+			{  
+				Utils.PrintLog("ex1: " + ex1.toString());
+			} 
+			finally 
+			{ 
+				socket.close();  
+			}  
+		}
+		catch (Exception ex2) 
+		{  
+			Utils.PrintLog("ex2: " + ex2.toString());
+		} 
 	}
 }
