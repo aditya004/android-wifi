@@ -4,16 +4,112 @@
 	android:background="@color/background_color"
     android:layout_width="fill_parent"
     android:layout_height="fill_parent" >
-	<Button    
-		android:id="@+id/scan_wifi"    
+	<LinearLayout  
+		android:orientation="horizontal"  
+		android:layout_width="wrap_content"  
+		android:layout_height="wrap_content" >  
+		<Button    
+			android:id="@+id/reset_view"    
+			android:layout_width="wrap_content"     
+			android:layout_height="wrap_content"     
+			android:text="RST" />  
+		<Button    
+			android:id="@+id/scan_wifi"    
+			android:layout_width="wrap_content"     
+			android:layout_height="wrap_content"     
+			android:text="SCAN" />  
+		<Button    
+			android:id="@+id/list_configured_wifi"    
+			android:layout_width="wrap_content"     
+			android:layout_height="wrap_content"     
+			android:text="LIST CONF" />  
+		<Button    
+			android:id="@+id/start_boarding_device"    
+			android:layout_width="wrap_content"     
+			android:layout_height="wrap_content"     
+			android:text="BOARD" />  
+	</LinearLayout>
+	<LinearLayout  
+		android:id="@+id/board_layout"    
+		android:orientation="vertical"  
+		android:layout_width="wrap_content"  
+		android:layout_height="wrap_content" >  
+		<LinearLayout  
+			android:id="@+id/board_layout1"    
+			android:orientation="horizontal"  
+			android:layout_width="wrap_content"  
+			android:layout_height="wrap_content" >  
+			<TextView
+				android:layout_width="wrap_content"     
+				android:layout_height="wrap_content"     
+				android:textColor="@color/text_color"
+				android:text="TARGET DEVICE: "/>  
+			<Spinner
+				android:id="@+id/target_device_spinner"    
+				android:layout_width="wrap_content"     
+				android:layout_height="wrap_content"
+				android:textColor="@color/text_color"
+				android:textSize="16sp"  
+				android:textStyle="bold|italic" />  
+			<TextView
+				android:id="@+id/target_device"    
+				android:layout_width="wrap_content"     
+				android:layout_height="wrap_content"     
+				android:textColor="@color/text_color"
+				android:textSize="16sp"  
+				android:textStyle="bold|italic"  
+				android:text=""/>  
+		</LinearLayout>
+		<LinearLayout  
+			android:orientation="horizontal"  
+			android:layout_width="wrap_content"  
+			android:layout_height="wrap_content" >  
+			<TextView
+				android:layout_width="wrap_content"     
+				android:layout_height="wrap_content"     
+				android:textColor="@color/text_color"
+				android:text="PWD: "/>  
+			<EditText
+				android:id="@+id/pwd"
+				android:layout_width="150dp"
+				android:layout_height="wrap_content"
+				android:layout_weight="1" />
+			<Button    
+				android:id="@+id/on_board_device"    
+				android:layout_width="wrap_content"     
+				android:layout_height="wrap_content"     
+				android:text="SAVE" />  
+		</LinearLayout>
+		<LinearLayout  
+			android:orientation="horizontal"  
+			android:layout_width="wrap_content"  
+			android:layout_height="wrap_content" >  
+			<TextView
+				android:layout_width="wrap_content"     
+				android:layout_height="wrap_content"     
+				android:textColor="@color/text_color"
+				android:textSize="16sp"  
+				android:text="SELECTED SSID: "/>  
+			<TextView
+				android:id="@+id/ssid"    
+				android:layout_width="wrap_content"     
+				android:layout_height="wrap_content"     
+				android:textColor="@color/text_color"
+				android:textSize="16sp"  
+				android:textStyle="bold|italic"  
+				android:text=""/>  
+		</LinearLayout>
+	</LinearLayout>
+	<TextView
+		android:id="@+id/info"    
 		android:layout_width="wrap_content"     
 		android:layout_height="wrap_content"     
-		android:text="SCAN WIFI" />  
+		android:textColor="@color/text_color"
+		android:text=""/>  
 	<ListView
 		android:id="@id/android:list"    
 		android:layout_width="fill_parent" 
 		android:layout_height="fill_parent"
-		android:background="@color/background_color"
 		android:transcriptMode="alwaysScroll"
 		android:layout_weight="1" />
 </LinearLayout>
