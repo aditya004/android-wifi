@@ -32,6 +32,11 @@ void loop()
 	while (wifly.available()) 
 	{
 		recvBuffer[recvBufferLen++] = wifly.read();
+		dbg(recvBuffer[recvBufferLen - 1]);
+		if(recvBufferLen >= RECV_BUFFER_LEN)
+		{
+			recvBufferLen = 0;
+		}
 	}
 
 	if (recvBufferLen > 0 && timer == 0)
@@ -62,21 +67,28 @@ void loop()
 			short i = 0;
 			short ssidLen = recvBuffer[12];
 			short pwdLen = recvBuffer[13];
+			char ssid[ssidLen + 1];
+			char pwd[pwdLen + 1];
 
-			dbgln("--------- CONF ---------");
-			dbg("ssid: ");
 			for(i = prefixLen; i < prefixLen + ssidLen; i++)
 			{
-				dbg(recvBuffer[i]);
+				ssid[i - prefixLen] = recvBuffer[i];
 			}
-			dbgln("");
+			ssid[i - prefixLen] = '\0';
 
-			dbg("pwd: ");
 			for(i = prefixLen + ssidLen; i < prefixLen + ssidLen + pwdLen; i++)
 			{
-				dbg(recvBuffer[i]);
+				pwd[i - prefixLen - ssidLen] = recvBuffer[i];
 			}
-			dbgln("");
+			pwd[i - prefixLen - ssidLen] = '\0';
+
+			dbgln("\n--------- got conf ---------");
+			dbg("ssid: ");
+			dbgln(ssid);
+			dbg("pwd: ");
+			dbgln(pwd);
+
+			onBoarding(ssid, pwd);
 
 			recvBufferLen = 0;
 			timer = 0;
@@ -93,4 +105,52 @@ void loop()
 	{
 		wifly.write(Serial.read());
 	}
+}
+
+// ==================== Logic Methods =====================
+void onBoarding(char ssid[], char pwd[])
+{
+	dbgln("--------- saving conf ---------");
+	wifly.write("$$$");
+	waitAndPrintUart();
+
+	wifly.write("set wlan ssid ");
+	wifly.write(ssid);
+	wifly.write('\r');
+	waitAndPrintUart();
+
+	wifly.write("set wlan pass ");
+	wifly.write(pwd);
+	wifly.write('\r');
+	waitAndPrintUart();
+
+	wifly.write("set wlan join 1\r");
+	waitAndPrintUart();
+
+	wifly.write("set ip dhcp 1\r");
+	waitAndPrintUart();
+
+	wifly.write("save\r");
+	waitAndPrintUart();
+
+	wifly.write("reboot\r");
+	waitAndPrintUart();
+
+	dbgln("--------- saved ---------");
+}
+
+// ==================== Helper Methods =====================
+void waitAndPrintUart()
+{
+	waitAndPrintUart(1000);
+}
+
+void waitAndPrintUart(short waitMilliSeconds)
+{
+	delay(waitMilliSeconds);
+	while(wifly.available())
+	{
+		dbg(char(wifly.read()));
+	}
+	dbgln("");
 }

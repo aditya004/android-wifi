@@ -14,6 +14,8 @@ import java.io.PrintWriter;
 import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
 import java.io.IOException;
+import java.net.DatagramSocket;
+import java.net.DatagramPacket;
 import android.app.ListActivity;
 import android.widget.Button;
 import android.widget.TextView;
@@ -39,18 +41,22 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
 
-
 public class MainActivity extends ListActivity
 {
 	private Button mResetView;
 	private Button mScanWifi;
+	private Button mScanDevice;
 	private Button mListConfiguredWifi;
 	private Button mStartBoardingDevice;
 	private Button mSaveOnBoardingInfo;
+	private Button mDeviceOn;
+	private Button mDeviceOff;
 	private TextView mInfo;
+	private TextView mDeviceName;
 	private TextView mOnBoardingSsid;
 	private EditText mOnBoardingPwd;
 	private LinearLayout mOnBoardingLayout;
+	private LinearLayout mDeviceLayout;
 	private Spinner mTargetDeviceSpinner;
 
 	private WifiManager mWifiManager;
@@ -59,14 +65,21 @@ public class MainActivity extends ListActivity
 	private static final short MSG_SCAN_WIFI = 1;
 	private static final short MSG_SHOW_WIFI_SCAN_RESULT = 2;
 	private static final short MSG_START_UP = 3;
-	private static final short MSG_ENABLE_BUTTONS = 4;
+	private static final short MSG_START_UP_DONE = 4;
 	private static final short MSG_ON_BOARD_DEVICE = 5;
 	private static final short MSG_ON_BOARDING_SUCCESS = 6;
 	private static final short MSG_ON_BOARDING_FAIL = 7;
+	private static final short MSG_START_DISCOVERY_DEVICE = 8;
+	private static final short MSG_DEVICE_DISCOVERYED = 9;
+	private static final short MSG_NO_DEVICE_DISCOVERYED = 10;
+	private static final short MSG_DEVICE_ON = 11;
+	private static final short MSG_DEVICE_OFF = 12;
 
-	private static final String DEVICE_AP_PREFIX = "WiFly";
+	private static final String[] DEVICE_AP_PREFIXS = {"WiFly", "roving"};
 	private static final String DEVICE_IP = "1.2.3.4";
 	private static final int DEVICE_TCP_PORT = 2000;
+	private static final int DISCOVERY_UDP_PORT = 55555;
+	private static final int DISCOVERY_TIMEOUT = 30000; // milliseconds
 	private static final int WIFI_SCAN_WAITING_TIME = 3000; // milliseconds
 	private static final int SAVE_ON_BOARDING_INTO_TO_DEVICE_RETRY_INTERVAL = 1500; // milliseconds
 	private static final int SAVE_ON_BOARDING_INTO_TO_DEVICE_RETRY_TIMES = 15;
@@ -74,111 +87,8 @@ public class MainActivity extends ListActivity
 	private int mSaveOnBoardingInfoToDeviceTryTimes = 0; 
 
 	private Handler mBackendHandler;
-	private Handler mHandler = new Handler() 
-	{
-		@Override
-		public void handleMessage(Message msg) 
-		{
-			switch (msg.what) 
-			{
-				case MSG_SHOW_WIFI_SCAN_RESULT:
-					List<ScanResult> results = mWifiManager.getScanResults();
-					Collections.sort(results, new WifiSignalLevelComparator());
-
-					List<String> devices = new ArrayList<String>();
-					String ssid = "";
-
-					List<Map<String, Object>> list = new ArrayList<Map<String, Object>>();
-					for(ScanResult item : results)
-					{ 
-						if(item.SSID.indexOf(DEVICE_AP_PREFIX) != -1)
-						{
-							devices.add(item.SSID);
-							
-							if(((String)msg.obj) == "onboarding")
-							{
-								continue;
-							}
-						}
-						else if(ssid == "")
-						{
-							ssid = item.SSID;
-						}
-
-						Map<String, Object> map = new HashMap<String, Object>();  
-						map.put("img_pre", R.drawable.wifi);		   
-						map.put("text", item.SSID);  
-						int imgId = 0;
-						switch(WifiManager.calculateSignalLevel(item.level, 4))
-						{
-							case 0:
-								imgId = R.drawable.wifi0;
-								break;
-							case 1:
-								imgId = R.drawable.wifi1;
-								break;
-							case 2:
-								imgId = R.drawable.wifi2;
-								break;
-							case 3:
-								imgId = R.drawable.wifi3;
-								break;
-							default:
-								break;
-						}
-						map.put("img", imgId);			 
-						list.add(map);	
-					} 
-
-					setListAdapter(new SimpleAdapter(MainActivity.this, list, R.layout.wifi_item,	
-										new String[]{"img_pre", "text", "img"},   
-										new int[]{R.id.img_pre, R.id.text, R.id.img}));  
-					getListView().setVisibility(View.VISIBLE);  
-					
-					if(results.size() > 1)// if there is only one, it is the devcie softAP
-					{
-						mOnBoardingSsid.setText(ssid);
-
-						ArrayAdapter adapter = new ArrayAdapter(MainActivity.this, R.layout.target_device, devices);
-						mTargetDeviceSpinner.setAdapter(adapter);
-					}
-				   	mScanWifi.setText("Scan"); 
-					mScanWifi.setEnabled(true); 
-					mStartBoardingDevice.setEnabled(true); 
-					mSaveOnBoardingInfo.setEnabled(true);
-					break;
-
-				case MSG_ENABLE_BUTTONS:
-					mScanWifi.setEnabled(true);
-					mListConfiguredWifi.setEnabled(true);
-					mSaveOnBoardingInfo.setEnabled(true);
-					mStartBoardingDevice.setEnabled(true);
-					break;
-
-				case MSG_ON_BOARDING_SUCCESS:
-					String successText = "success!";  
-					Toast.makeText(getApplicationContext(), successText, Toast.LENGTH_LONG).show();  
-					mSaveOnBoardingInfo.setEnabled(true);
-
-					// turn the wifi back
-					joinDeviceAp(mPreviousSsid);
-					break;
-
-				case MSG_ON_BOARDING_FAIL:
-					String failText = "onboarding failed, please retry.";  
-					Toast.makeText(getApplicationContext(), failText, Toast.LENGTH_LONG).show();  
-					mSaveOnBoardingInfo.setEnabled(true);
-
-					// turn the wifi back
-					joinDeviceAp(mPreviousSsid);
-					break;
-
-				default:
-					break;
-			}
-		}
-	};
-
+	private Handler mDiscoveryHandler;
+	private Handler mMainHandler;
 
 	@Override
 	public void onCreate(Bundle savedInstanceState)
@@ -227,90 +137,40 @@ public class MainActivity extends ListActivity
 
 		mResetView = (Button) findViewById(R.id.reset_view);
 		mScanWifi = (Button) findViewById(R.id.scan_wifi);
+		mScanDevice = (Button) findViewById(R.id.scan_device);
 		mListConfiguredWifi = (Button) findViewById(R.id.list_configured_wifi);
 		mSaveOnBoardingInfo = (Button) findViewById(R.id.save_on_boarding_info);
 		mStartBoardingDevice = (Button) findViewById(R.id.start_boarding_device);
+		mDeviceOn = (Button) findViewById(R.id.device_on);
+		mDeviceOff = (Button) findViewById(R.id.device_off);
 		mInfo = (TextView) findViewById(R.id.info);
+		mDeviceName = (TextView) findViewById(R.id.device_name);
 		mOnBoardingSsid = (TextView) findViewById(R.id.on_boarding_ssid);
 		mOnBoardingPwd = (EditText) findViewById(R.id.on_boarding_pwd);
 		mOnBoardingLayout = (LinearLayout) findViewById(R.id.on_boarding_layout);
+		mDeviceLayout = (LinearLayout) findViewById(R.id.device_layout);
 		mTargetDeviceSpinner = (Spinner) findViewById(R.id.target_device_spinner);
 
 		mResetView.setOnClickListener(new MyListener());
 		mScanWifi.setOnClickListener(new MyListener());
+		mScanDevice.setOnClickListener(new MyListener());
 		mListConfiguredWifi.setOnClickListener(new MyListener());
 		mSaveOnBoardingInfo.setOnClickListener(new MyListener());
 		mStartBoardingDevice.setOnClickListener(new MyListener());
+		mDeviceOn.setOnClickListener(new MyListener());
+		mDeviceOff.setOnClickListener(new MyListener());
 
 		mOnBoardingLayout.setVisibility(View.GONE);
 
+		mMainHandler = new MainHandler();
+
 		HandlerThread backendThread = new HandlerThread("BackendHandler");
 		backendThread.start();
-		mBackendHandler = new Handler(backendThread.getLooper())
-		{
-			@Override
-			public void handleMessage(Message msg) 
-			{
-				switch (msg.what) 
-				{
-					case MSG_START_UP:
-						while(!mWifiManager.isWifiEnabled())
-						{
-							sleep(200);
-						}
-						Message enableButtonsMsg = mHandler.obtainMessage(MSG_ENABLE_BUTTONS);
-						mHandler.sendMessage(enableButtonsMsg);
-						break;
+		mBackendHandler = new BackendHandler(backendThread.getLooper());
 
-					case MSG_SCAN_WIFI:
-						mWifiManager.startScan();
-						sleep(WIFI_SCAN_WAITING_TIME);
-						Message showWifiScanResultMsg = mHandler.obtainMessage(MSG_SHOW_WIFI_SCAN_RESULT, msg.obj);
-						mHandler.sendMessage(showWifiScanResultMsg);
-						break;
-
-					case MSG_ON_BOARD_DEVICE:
-						saveOnBoardingInfoToDevice(msg);
-						break;
-
-					default:
-						break;
-				}
-			}
-		};
-	}
-
-	private class MyListener implements OnClickListener 
-	{
-		@Override
-		public void onClick(View v)
-		{
-			switch(v.getId())
-			{
-				case R.id.scan_wifi:
-					startScanWifi("scan");
-					break;
-
-				case R.id.list_configured_wifi:
-					listConfiguredWifis();	
-					break;
-
-				case R.id.start_boarding_device:
-					startBoardingDevice();
-					break;
-
-				case R.id.save_on_boarding_info:
-					saveOnBoardingInfo();
-					break;
-
-				case R.id.reset_view:
-					resetView();
-					break;
-
-				default:
-					break;
-			}
-		}
+		HandlerThread discoveryThread = new HandlerThread("DiscoveryHandler");
+		discoveryThread.start();
+		mDiscoveryHandler = new DiscoveryHandler(discoveryThread.getLooper());
 	}
 
 	private void sleep(int milliseconds)
@@ -403,30 +263,49 @@ public class MainActivity extends ListActivity
 
 	private void saveOnBoardingInfo()
 	{
-		mSaveOnBoardingInfo.setEnabled(false);
-
-		String targetDeviceSsid = mTargetDeviceSpinner.getSelectedItem().toString();
+		String targetDeviceSsid = mTargetDeviceSpinner.getSelectedItem() != null ? mTargetDeviceSpinner.getSelectedItem().toString() : "";
 		String ssid = mOnBoardingSsid.getText().toString();
 		String pwd = mOnBoardingPwd.getText().toString();
 
-		WifiInfo wifiInfo = mWifiManager.getConnectionInfo();
-		if(wifiInfo != null)
+		if(targetDeviceSsid.length() == 0 || ssid.length() == 0)
 		{
-			mPreviousSsid = wifiInfo.getSSID();
+			String text = "no device or AP was detected.";
+			Toast.makeText(MainActivity.this, text, Toast.LENGTH_LONG).show();
 		}
+		else
+		{
+			mSaveOnBoardingInfo.setText("saving...");
+			mSaveOnBoardingInfo.setEnabled(false);
 
-		addDeviceAp(targetDeviceSsid);
-		joinDeviceAp(targetDeviceSsid);
+			WifiInfo wifiInfo = mWifiManager.getConnectionInfo();
+			if(wifiInfo != null)
+			{
+				mPreviousSsid = wifiInfo.getSSID();
+			}
 
-		// save the ssid and pwd to device
-		mSaveOnBoardingInfoToDeviceTryTimes = 0;
-		String obj = ssid + pwd;
-		Message msg = mBackendHandler.obtainMessage(MSG_ON_BOARD_DEVICE, obj);
-		msg.arg1 = ssid.length();
-		msg.arg2 = pwd.length();
-		mBackendHandler.sendMessage(msg);
+			addDeviceAp(targetDeviceSsid);
+			joinDeviceAp(targetDeviceSsid);
+
+			// save the ssid and pwd to device
+			mSaveOnBoardingInfoToDeviceTryTimes = 0;
+			String obj = ssid + pwd;
+			Message msg = mBackendHandler.obtainMessage(MSG_ON_BOARD_DEVICE, obj);
+			msg.arg1 = ssid.length();
+			msg.arg2 = pwd.length();
+			mBackendHandler.sendMessage(msg);
+		}
 	}
+	
+	private void scanDevice()
+	{
+		mScanDevice.setText("scanning...");
+		mScanDevice.setEnabled(false);
+		mDeviceLayout.setVisibility(View.GONE);
 
+		Message msg = mDiscoveryHandler.obtainMessage(MSG_START_DISCOVERY_DEVICE);
+		mDiscoveryHandler.sendMessage(msg);
+	}
+	
 	private void resetView()
 	{
 		mInfo.setVisibility(View.GONE);
@@ -464,7 +343,7 @@ public class MainActivity extends ListActivity
 		mScanWifi.setEnabled(false);
 		String infoText = "scanning...";
 		mScanWifi.setText(infoText);
-		//Toast.makeText(MainActivity.this, infoText, android.widget.Toast.LENGTH_LONG).show();
+		//Toast.makeText(MainActivity.this, infoText, Toast.LENGTH_LONG).show();
 	}
 
 	private void saveOnBoardingInfoToDevice(Message msg)
@@ -487,12 +366,12 @@ public class MainActivity extends ListActivity
 				out.print(pwd);  
 				out.flush();  
 
-				Message onBoardingSuccessMsg = mHandler.obtainMessage(MSG_ON_BOARDING_SUCCESS);
-				mHandler.sendMessage(onBoardingSuccessMsg);
+				Message onBoardingSuccessMsg = mMainHandler.obtainMessage(MSG_ON_BOARDING_SUCCESS);
+				mMainHandler.sendMessage(onBoardingSuccessMsg);
 			}
 			catch (Exception ex1) 
 			{   
-				Utils.PrintLog("ex1: " + ex1.toString());
+				Utils.PrintLog("saveOnBoardingInfoToDevice Exception: " + ex1.toString());
 				retrySavingOnBoardingInfoToDevice(msg);
 			} 
 			finally 
@@ -502,7 +381,7 @@ public class MainActivity extends ListActivity
 		}
 		catch (Exception ex2) 
 		{ 
-			Utils.PrintLog("ex2: " + ex2.toString());
+			Utils.PrintLog("saveOnBoardingInfoToDevice Exception: " + ex2.toString());
 			retrySavingOnBoardingInfoToDevice(msg);
 		} 
 	}
@@ -519,8 +398,308 @@ public class MainActivity extends ListActivity
 		}
 		else
 		{
-			Message onBoardingSuccessMsg = mHandler.obtainMessage(MSG_ON_BOARDING_FAIL);
-			mHandler.sendMessage(onBoardingSuccessMsg);
+			Message onBoardingSuccessMsg = mMainHandler.obtainMessage(MSG_ON_BOARDING_FAIL);
+			mMainHandler.sendMessage(onBoardingSuccessMsg);
+		}
+	}
+
+	private boolean isDevicpAp(String ssid)
+	{
+		boolean result = false;
+		
+		for(int i = 0; i < DEVICE_AP_PREFIXS.length; i++)
+		{
+			if(ssid.indexOf(DEVICE_AP_PREFIXS[i]) != -1)
+			{
+				result = true;
+				break;
+			}
+		}
+
+		return result;
+	}
+
+	private void turnOnDevice()
+	{
+	}
+
+	private void turnOffDevice()
+	{
+	}
+
+	// == handlers & listener ==============================================================
+	
+	private class MyListener implements OnClickListener 
+	{
+		@Override
+		public void onClick(View v)
+		{
+			switch(v.getId())
+			{
+				case R.id.scan_wifi:
+					startScanWifi("scan");
+					break;
+
+				case R.id.list_configured_wifi:
+					listConfiguredWifis();	
+					break;
+
+				case R.id.start_boarding_device:
+					startBoardingDevice();
+					break;
+
+				case R.id.save_on_boarding_info:
+					saveOnBoardingInfo();
+					break;
+
+				case R.id.reset_view:
+					resetView();
+					break;
+
+				case R.id.scan_device:
+					scanDevice();
+					break;
+
+				case R.id.device_on:
+					turnOnDevice();
+					break;
+
+				case R.id.device_off:
+					turnOffDevice();
+					break;
+
+				default:
+					break;
+			}
+		}
+	}
+	private class BackendHandler extends Handler
+	{
+		public BackendHandler(Looper looper)
+		{
+			super(looper);
+		}
+
+		@Override
+		public void handleMessage(Message msg) 
+		{
+			switch (msg.what) 
+			{
+				case MSG_START_UP:
+					while(!mWifiManager.isWifiEnabled())
+					{
+						sleep(200);
+					}
+					Message enableButtonsMsg = mMainHandler.obtainMessage(MSG_START_UP_DONE);
+					mMainHandler.sendMessage(enableButtonsMsg);
+					break;
+
+				case MSG_SCAN_WIFI:
+					mWifiManager.startScan();
+					sleep(WIFI_SCAN_WAITING_TIME);
+					Message showWifiScanResultMsg = mMainHandler.obtainMessage(MSG_SHOW_WIFI_SCAN_RESULT, msg.obj);
+					mMainHandler.sendMessage(showWifiScanResultMsg);
+					break;
+
+				case MSG_ON_BOARD_DEVICE:
+					saveOnBoardingInfoToDevice(msg);
+					break;
+
+				default:
+					break;
+			}
+		}
+	}
+
+	private class DiscoveryHandler extends Handler
+	{
+		public DiscoveryHandler(Looper looper)
+		{
+			super(looper);
+		}
+
+		@Override
+		public void handleMessage(Message msg) 
+		{
+			switch (msg.what) 
+			{
+				case MSG_START_DISCOVERY_DEVICE:
+					byte[] buffer = new byte[512];
+					DatagramSocket datagramSocket = null;
+					try
+					{
+						datagramSocket = new DatagramSocket(DISCOVERY_UDP_PORT);
+						DatagramPacket datagramPacket = new DatagramPacket(buffer, buffer.length);
+						datagramSocket.setSoTimeout(DISCOVERY_TIMEOUT);
+						datagramSocket.receive(datagramPacket);
+						
+						// "WiFly-EZX"
+						if(datagramPacket.getLength() >= 110 &&
+							buffer[60] == 0x57 &&
+							buffer[61] == 0x69 &&
+							buffer[62] == 0x46 &&
+							buffer[63] == 0x6C &&
+							buffer[64] == 0x79 &&
+							buffer[65] == 0x2D &&
+							buffer[66] == 0x45 &&
+							buffer[67] == 0x5A &&
+							buffer[68] == 0x58)
+						{
+							String deviceIp = datagramPacket.getAddress().getHostAddress().toString();
+							Message discoveryedMsg = mMainHandler.obtainMessage(MSG_DEVICE_DISCOVERYED);
+							discoveryedMsg.obj = deviceIp;
+							mMainHandler.sendMessage(discoveryedMsg);
+						}
+						else
+						{
+							Message noDeviceDiscoveryedMsg = mMainHandler.obtainMessage(MSG_NO_DEVICE_DISCOVERYED);
+							mMainHandler.sendMessage(noDeviceDiscoveryedMsg);
+						}
+					}
+					catch(Exception ex)
+					{
+						Utils.PrintLog("Discovery Device Exception: " + ex.toString());
+					}
+					finally
+					{
+						if(datagramSocket != null)
+						{
+							datagramSocket.close();
+						}
+					}
+					break;
+
+				default:
+					break;
+			}
+		}
+	}
+
+	private class MainHandler extends Handler
+	{ 
+		@Override
+		public void handleMessage(Message msg) 
+		{
+			switch (msg.what) 
+			{
+				case MSG_SHOW_WIFI_SCAN_RESULT:
+					List<ScanResult> results = mWifiManager.getScanResults();
+					Collections.sort(results, new WifiSignalLevelComparator());
+
+					List<String> devices = new ArrayList<String>();
+					String ssid = "";
+
+					List<Map<String, Object>> list = new ArrayList<Map<String, Object>>();
+					for(ScanResult item : results)
+					{ 
+						if(isDevicpAp(item.SSID))
+						{
+							devices.add(item.SSID);
+							
+							if(((String)msg.obj) == "onboarding")
+							{
+								continue;
+							}
+						}
+						else if(ssid == "")
+						{
+							ssid = item.SSID;
+						}
+
+						Map<String, Object> map = new HashMap<String, Object>();  
+						map.put("img_pre", R.drawable.wifi);		   
+						map.put("text", item.SSID);  
+						int imgId = 0;
+						switch(WifiManager.calculateSignalLevel(item.level, 4))
+						{
+							case 0:
+								imgId = R.drawable.wifi0;
+								break;
+							case 1:
+								imgId = R.drawable.wifi1;
+								break;
+							case 2:
+								imgId = R.drawable.wifi2;
+								break;
+							case 3:
+								imgId = R.drawable.wifi3;
+								break;
+							default:
+								break;
+						}
+						map.put("img", imgId);			 
+						list.add(map);	
+					} 
+
+					setListAdapter(new SimpleAdapter(MainActivity.this, list, R.layout.wifi_item,	
+										new String[]{"img_pre", "text", "img"},   
+										new int[]{R.id.img_pre, R.id.text, R.id.img}));  
+					getListView().setVisibility(View.VISIBLE);  
+					
+					if(results.size() > 1)// if there is only one, it is the devcie softAP
+					{
+						mOnBoardingSsid.setText(ssid);
+
+						ArrayAdapter adapter = new ArrayAdapter(MainActivity.this, R.layout.target_device, devices);
+						mTargetDeviceSpinner.setAdapter(adapter);
+					}
+				   	mScanWifi.setText("Scan"); 
+					mScanWifi.setEnabled(true); 
+					mStartBoardingDevice.setEnabled(true); 
+					mSaveOnBoardingInfo.setEnabled(true);
+					break;
+
+				case MSG_START_UP_DONE:
+					mScanWifi.setEnabled(true);
+					mListConfiguredWifi.setEnabled(true);
+					mSaveOnBoardingInfo.setEnabled(true);
+					mStartBoardingDevice.setEnabled(true);
+
+					scanDevice();
+					break;
+
+				case MSG_ON_BOARDING_SUCCESS:
+					String successText = "success!";  
+					Toast.makeText(getApplicationContext(), successText, Toast.LENGTH_LONG).show();  
+					mSaveOnBoardingInfo.setText("Save");
+					mSaveOnBoardingInfo.setEnabled(true);
+
+					// turn the wifi back
+					joinDeviceAp(mPreviousSsid);
+					break;
+
+				case MSG_ON_BOARDING_FAIL:
+					String failText = "onboarding failed, please retry.";  
+					Toast.makeText(getApplicationContext(), failText, Toast.LENGTH_LONG).show();  
+					mSaveOnBoardingInfo.setText("Save");
+					mSaveOnBoardingInfo.setEnabled(true);
+
+					// turn the wifi back
+					joinDeviceAp(mPreviousSsid);
+					break;
+
+				case MSG_DEVICE_DISCOVERYED:
+					String deviceIp = (String)msg.obj;
+					String deviceDiscoveryedText = "detected " + deviceIp;
+					Toast.makeText(getApplicationContext(), deviceDiscoveryedText, Toast.LENGTH_LONG).show();  
+
+					mScanDevice.setText("ScanDevice");
+					mScanDevice.setEnabled(true);
+					mDeviceName.setText(deviceIp);
+					mDeviceLayout.setVisibility(View.VISIBLE);
+					break;
+
+				case MSG_NO_DEVICE_DISCOVERYED:
+					String noDiscoveryText = "no device was discoveryed.";
+					Toast.makeText(getApplicationContext(), noDiscoveryText, Toast.LENGTH_LONG).show();  
+
+					mScanDevice.setText("ScanDevice");
+					mScanDevice.setEnabled(true);
+					break;
+
+				default:
+					break;
+			}
 		}
 	}
 }

@@ -17,17 +17,27 @@
 			android:id="@+id/scan_wifi"    
 			android:layout_width="wrap_content"     
 			android:layout_height="wrap_content"     
-			android:text="Scan" />  
+			android:text="ScanWifi" />  
 		<Button    
 			android:id="@+id/list_configured_wifi"    
 			android:layout_width="wrap_content"     
 			android:layout_height="wrap_content"     
 			android:text="ListConf" />  
+	</LinearLayout>
+	<LinearLayout  
+		android:orientation="horizontal"  
+		android:layout_width="wrap_content"  
+		android:layout_height="wrap_content" >  
 		<Button 
 			android:id="@+id/start_boarding_device"    
 			android:layout_width="wrap_content"     
 			android:layout_height="wrap_content"     
-			android:text="OnBoarding" />  
+			android:text="OnBoardDevice" />  
+		<Button    
+			android:id="@+id/scan_device"    
+			android:layout_width="wrap_content"     
+			android:layout_height="wrap_content"     
+			android:text="ScanDevice" />  
 	</LinearLayout>
 	<LinearLayout  
 		android:id="@+id/on_boarding_layout"    
@@ -105,6 +115,30 @@
 		android:layout_height="wrap_content"     
 		android:textColor="@color/text_color"
 		android:text=""/>  
+	<LinearLayout  
+		android:id="@+id/device_layout"    
+		android:orientation="horizontal"  
+		android:layout_width="wrap_content"  
+		android:layout_height="wrap_content" >  
+		<TextView
+			android:id="@+id/device_name"    
+			android:layout_width="wrap_content"     
+			android:layout_height="wrap_content"     
+			android:textColor="@color/text_color"
+			android:textSize="16sp"  
+			android:textStyle="bold|italic"  
+			android:text=""/>  
+		<Button 
+			android:id="@+id/device_on"    
+			android:layout_width="wrap_content"     
+			android:layout_height="wrap_content"     
+			android:text="On" />  
+		<Button 
+			android:id="@+id/device_off"    
+			android:layout_width="wrap_content"     
+			android:layout_height="wrap_content"     
+			android:text="Off" />  
+	</LinearLayout>
 	<ListView
 		android:id="@id/android:list"    
 		android:layout_width="fill_parent" 
