@@ -74,12 +74,14 @@ public class MainActivity extends ListActivity
 	private static final short MSG_NO_DEVICE_DISCOVERYED = 10;
 	private static final short MSG_DEVICE_ON = 11;
 	private static final short MSG_DEVICE_OFF = 12;
+	private static final short MSG_SEND_CMD_TO_DEVICE = 13;
 
 	private static final String[] DEVICE_AP_PREFIXS = {"WiFly", "roving"};
-	private static final String DEVICE_IP = "1.2.3.4";
+	private static final String DEVICE_AP_IP = "1.2.3.4";
+	private static final int DEVICE_AP_TCP_PORT = 2000;
 	private static final int DEVICE_TCP_PORT = 2000;
 	private static final int DISCOVERY_UDP_PORT = 55555;
-	private static final int DISCOVERY_TIMEOUT = 30000; // milliseconds
+	private static final int DISCOVERY_TIMEOUT = 15000; // milliseconds
 	private static final int WIFI_SCAN_WAITING_TIME = 3000; // milliseconds
 	private static final int SAVE_ON_BOARDING_INTO_TO_DEVICE_RETRY_INTERVAL = 1500; // milliseconds
 	private static final int SAVE_ON_BOARDING_INTO_TO_DEVICE_RETRY_TIMES = 15;
@@ -87,7 +89,7 @@ public class MainActivity extends ListActivity
 	private int mSaveOnBoardingInfoToDeviceTryTimes = 0; 
 
 	private Handler mBackendHandler;
-	private Handler mDiscoveryHandler;
+	private Handler mCommHandler;
 	private Handler mMainHandler;
 
 	@Override
@@ -168,9 +170,9 @@ public class MainActivity extends ListActivity
 		backendThread.start();
 		mBackendHandler = new BackendHandler(backendThread.getLooper());
 
-		HandlerThread discoveryThread = new HandlerThread("DiscoveryHandler");
+		HandlerThread discoveryThread = new HandlerThread("CommHandler");
 		discoveryThread.start();
-		mDiscoveryHandler = new DiscoveryHandler(discoveryThread.getLooper());
+		mCommHandler = new CommHandler(discoveryThread.getLooper());
 	}
 
 	private void sleep(int milliseconds)
@@ -298,12 +300,12 @@ public class MainActivity extends ListActivity
 	
 	private void scanDevice()
 	{
-		mScanDevice.setText("scanning...");
+		mScanDevice.setText("scanning device...");
 		mScanDevice.setEnabled(false);
 		mDeviceLayout.setVisibility(View.GONE);
 
-		Message msg = mDiscoveryHandler.obtainMessage(MSG_START_DISCOVERY_DEVICE);
-		mDiscoveryHandler.sendMessage(msg);
+		Message msg = mCommHandler.obtainMessage(MSG_START_DISCOVERY_DEVICE);
+		mCommHandler.sendMessage(msg);
 	}
 	
 	private void resetView()
@@ -341,7 +343,7 @@ public class MainActivity extends ListActivity
 		}
 
 		mScanWifi.setEnabled(false);
-		String infoText = "scanning...";
+		String infoText = "scanning wifi...";
 		mScanWifi.setText(infoText);
 		//Toast.makeText(MainActivity.this, infoText, Toast.LENGTH_LONG).show();
 	}
@@ -349,41 +351,43 @@ public class MainActivity extends ListActivity
 	private void saveOnBoardingInfoToDevice(Message msg)
 	{
 		sleep(SAVE_ON_BOARDING_INTO_TO_DEVICE_RETRY_INTERVAL); // waiting for the wifi ready
-		Utils.PrintLog("writing to " + DEVICE_IP + ":" + DEVICE_TCP_PORT);
+		Utils.PrintLog("writing to " + DEVICE_AP_IP + ":" + DEVICE_AP_TCP_PORT);
+		Socket socket = null;
 		try
 		{
-			Socket socket = new Socket(DEVICE_IP, DEVICE_TCP_PORT);  
-			try
-			{
-				String ssid = ((String)msg.obj).substring(0, msg.arg1);
-				String pwd = ((String)msg.obj).substring(msg.arg1);
+			String ssid = ((String)msg.obj).substring(0, msg.arg1);
+			String pwd = ((String)msg.obj).substring(msg.arg1);
 
-				PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);  
-				out.print("*CONF*");  
-				out.write(msg.arg1);  
-				out.write(msg.arg2);  
-				out.print(ssid);  
-				out.print(pwd);  
-				out.flush();  
+			socket = new Socket(DEVICE_AP_IP, DEVICE_AP_TCP_PORT);  
+			PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);  
+			out.print("*CONF*");  
+			out.write(msg.arg1);  
+			out.write(msg.arg2);  
+			out.print(ssid);  
+			out.print(pwd);  
+			out.flush();  
 
-				Message onBoardingSuccessMsg = mMainHandler.obtainMessage(MSG_ON_BOARDING_SUCCESS);
-				mMainHandler.sendMessage(onBoardingSuccessMsg);
-			}
-			catch (Exception ex1) 
-			{   
-				Utils.PrintLog("saveOnBoardingInfoToDevice Exception: " + ex1.toString());
-				retrySavingOnBoardingInfoToDevice(msg);
-			} 
-			finally 
-			{ 
-				socket.close();  
-			}  
+			Message onBoardingSuccessMsg = mMainHandler.obtainMessage(MSG_ON_BOARDING_SUCCESS);
+			mMainHandler.sendMessage(onBoardingSuccessMsg);
 		}
-		catch (Exception ex2) 
-		{ 
-			Utils.PrintLog("saveOnBoardingInfoToDevice Exception: " + ex2.toString());
+		catch (Exception ex) 
+		{   
+			Utils.PrintLog("saveOnBoardingInfoToDevice Exception: " + ex.toString());
 			retrySavingOnBoardingInfoToDevice(msg);
 		} 
+		finally 
+		{ 
+			if(socket != null)
+			{
+				try
+				{
+					socket.close();  
+				}
+				catch (Exception ex2)
+				{
+				}
+			}
+		}  
 	}
 
 	private void retrySavingOnBoardingInfoToDevice(Message msg)
@@ -421,10 +425,50 @@ public class MainActivity extends ListActivity
 
 	private void turnOnDevice()
 	{
+		Message msg = mCommHandler.obtainMessage(MSG_SEND_CMD_TO_DEVICE);
+		msg.obj = "on";
+		mCommHandler.sendMessage(msg);
 	}
 
 	private void turnOffDevice()
 	{
+		Message msg = mCommHandler.obtainMessage(MSG_SEND_CMD_TO_DEVICE);
+		msg.obj = "off";
+		mCommHandler.sendMessage(msg);
+	}
+
+	private void sendCmdToDevice(String cmd)
+	{
+		Socket socket = null;
+		try
+		{
+			int cmdLen = cmd.length();
+			String DeviceIp = mDeviceName.getText().toString();
+
+			socket = new Socket(DeviceIp, DEVICE_TCP_PORT);  
+			PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);  
+			out.print("*CMD*");  
+			out.write(cmdLen);  
+			out.print(cmd);
+			out.flush();  
+		}
+		catch (Exception ex) 
+		{   
+			Utils.PrintLog("Send Cmd to Device Exception: " + ex.toString());
+		} 
+		finally 
+		{ 
+			if(socket != null)
+			{
+				try
+				{
+					socket.close();  
+				}
+				catch (Exception ex2)
+				{
+				}
+			}
+		} 
 	}
 
 	// == handlers & listener ==============================================================
@@ -511,9 +555,9 @@ public class MainActivity extends ListActivity
 		}
 	}
 
-	private class DiscoveryHandler extends Handler
+	private class CommHandler extends Handler
 	{
-		public DiscoveryHandler(Looper looper)
+		public CommHandler(Looper looper)
 		{
 			super(looper);
 		}
@@ -550,14 +594,12 @@ public class MainActivity extends ListActivity
 							discoveryedMsg.obj = deviceIp;
 							mMainHandler.sendMessage(discoveryedMsg);
 						}
-						else
-						{
-							Message noDeviceDiscoveryedMsg = mMainHandler.obtainMessage(MSG_NO_DEVICE_DISCOVERYED);
-							mMainHandler.sendMessage(noDeviceDiscoveryedMsg);
-						}
 					}
 					catch(Exception ex)
 					{
+						Message noDeviceDiscoveryedMsg = mMainHandler.obtainMessage(MSG_NO_DEVICE_DISCOVERYED);
+						mMainHandler.sendMessage(noDeviceDiscoveryedMsg);
+
 						Utils.PrintLog("Discovery Device Exception: " + ex.toString());
 					}
 					finally
@@ -567,6 +609,11 @@ public class MainActivity extends ListActivity
 							datagramSocket.close();
 						}
 					}
+					break;
+
+				case MSG_SEND_CMD_TO_DEVICE:
+					String cmd = (String)msg.obj;
+					sendCmdToDevice(cmd);
 					break;
 
 				default:
@@ -663,9 +710,13 @@ public class MainActivity extends ListActivity
 					Toast.makeText(getApplicationContext(), successText, Toast.LENGTH_LONG).show();  
 					mSaveOnBoardingInfo.setText("Save");
 					mSaveOnBoardingInfo.setEnabled(true);
+					mOnBoardingLayout.setVisibility(View.GONE);
+					getListView().setVisibility(View.GONE);
 
 					// turn the wifi back
 					joinDeviceAp(mPreviousSsid);
+
+					scanDevice();
 					break;
 
 				case MSG_ON_BOARDING_FAIL:
