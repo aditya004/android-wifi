@@ -690,7 +690,7 @@ public class MainActivity extends ListActivity
 						ArrayAdapter adapter = new ArrayAdapter(MainActivity.this, R.layout.target_device, devices);
 						mTargetDeviceSpinner.setAdapter(adapter);
 					}
-				   	mScanWifi.setText("Scan"); 
+				   	mScanWifi.setText("ScanWifi"); 
 					mScanWifi.setEnabled(true); 
 					mStartBoardingDevice.setEnabled(true); 
 					mSaveOnBoardingInfo.setEnabled(true);

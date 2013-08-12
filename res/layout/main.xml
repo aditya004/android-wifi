@@ -22,7 +22,7 @@
 			android:id="@+id/list_configured_wifi"    
 			android:layout_width="wrap_content"     
 			android:layout_height="wrap_content"     
-			android:text="ListConf" />  
+			android:text="ListConfWifi" />  
 	</LinearLayout>
 	<LinearLayout  
 		android:orientation="horizontal"  
